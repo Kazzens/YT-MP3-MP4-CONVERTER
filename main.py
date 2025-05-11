@@ -27,6 +27,8 @@ def download_video(url, convert_to_mp3=True):
         output_path = OUTPUT_PATH_MP3 if convert_to_mp3 else OUTPUT_PATH_MP4
         output_template = os.path.join(output_path, '%(title)s - Converted by KAZZENS.%(ext)s')
 
+        ext = 'mp3' if convert_to_mp3 else 'mp4'
+
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio' if convert_to_mp3 else 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'outtmpl': output_template,
@@ -36,57 +38,73 @@ def download_video(url, convert_to_mp3=True):
 
         if convert_to_mp3:
             ydl_opts['postprocessors'] = [
-                {
+            {
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '320'
-                }
-            ]
-            ext = 'mp3'
+            }
+        ]
         else:
-            ydl_opts['postprocessors'] = [
-                {
-                    'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4'
-                }
-            ]
+            ydl_opts['postprocessors'] = []  
+
+        if not convert_to_mp3:
             ydl_opts['merge_output_format'] = 'mp4'
             ydl_opts['postprocessor_args'] = ['-c:v', 'copy', '-c:a', 'copy']
-            ext = 'mp4'
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             if info.get('is_live'):
-                return "❌ Error: Live streams are not supported."
-            info = ydl.extract_info(url, download=True)
-        ext = 'mp3' if convert_to_mp3 else 'mp4'  # Force mp4 if not mp3
+                return "❌ Error: Live streams are not supported.", None
+            ydl.process_info(info)
+
         safe_title = sub(r'[\\/*?:"<>|]', "", info['title'])
         filename = f"{safe_title} - Converted by KAZZENS.{ext}"
         filepath = os.path.join(output_path, filename)
 
-        # Clean up leftover .webm if it exists
         if not convert_to_mp3:
             pattern = os.path.join(output_path, f"{safe_title} - Converted by KAZZENS*.webm")
-            for leftover_webm in glob.glob(pattern):
+            for leftover in glob.glob(pattern):
                 try:
-                    os.remove(leftover_webm)
+                    os.remove(leftover)
                 except FileNotFoundError:
                     pass
 
-                # Strip metadata
         if os.path.exists(filepath):
             cleaned = filepath.replace(f'.{ext}', f'_clean.{ext}')
-            subprocess.run([
-                FFMPEG_PATH, '-i', filepath,
-                '-map_metadata', '-1',
-                '-c', 'copy',
-                '-y', cleaned
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"📦 Cleaning metadata: {filepath} → {cleaned}")
+
+            if ext == 'mp3':
+                ffmpeg_cmd = [
+                    FFMPEG_PATH, '-i', filepath,
+                    '-map_metadata', '-1',         # removes all metadata
+                    '-vn',                         # removes any attached image
+                    '-codec:a', 'libmp3lame',
+                    '-qscale:a', '2',
+                    '-y', cleaned
+                ]
+            else:
+                ffmpeg_cmd = [
+                    FFMPEG_PATH, '-i', filepath,
+                    '-map_metadata', '-1',             # removes all global metadata
+                    '-map_chapters', '-1',             # remove chapters
+                    '-movflags', '+faststart',         # better for web compatibility
+                    '-movflags', 'use_metadata_tags',  # prevents hidden/private tags
+                    '-c:v', 'libx264',
+                    '-preset', 'ultrafast',
+                    '-c:a', 'aac',
+                    '-y', cleaned
+                ]
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                print(f"❌ FFmpeg Error:\n{result.stderr}")
+                return f"❌ FFmpeg failed to clean metadata:\n{result.stderr}", None
 
             try:
                 os.remove(filepath)
                 os.rename(cleaned, filepath)
             except Exception as e:
-                print(f"⚠️ Post-clean rename failed: {e}")
+                print(f"⚠️ Rename failed: {e}")
 
         return f"✅ File downloaded: {filename}", output_path
 
