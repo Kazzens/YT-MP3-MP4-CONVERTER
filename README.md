@@ -1,4 +1,3 @@
-```markdown
 # 🎵 YouTube to MP3/MP4 Converter (GUI) — by KAZZEN
 
 A full-featured graphical YouTube downloader with:
@@ -26,15 +25,15 @@ A full-featured graphical YouTube downloader with:
 ## 🛠 Setup
 
 ```bash
-git clone https://github.com/<yourusername>/yt-converter-gui.git
-cd yt-converter-gui
+git clone https://github.com/Kazzens/YT-MP3-MP4-CONVERTER
+cd YT-MP3-MP4-CONVERTER
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
 
-Or use `run_converter.bat` if provided.
+Or use the `run_converter.bat` provided.
 
 ---
 
